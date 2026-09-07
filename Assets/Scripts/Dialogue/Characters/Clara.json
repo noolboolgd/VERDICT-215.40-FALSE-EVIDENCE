@@ -1,0 +1,20 @@
+{
+    "character": "Clara",
+    "dialogue":{
+        "player_meeting_clara":{
+            "speaker": "player",
+            "id": "player_meeting_clara",
+            "next": "clara_intro"
+        },
+        "clara_intro":{
+            "speaker": "clara",
+            "id": "clara_intro",
+            "next": "player_intro_to_clara"
+        },
+        "player_intro_to_clara":{
+            "speaker": "player",
+            "id": "player_intro_to_clara"
+        }
+    }
+    
+}
