@@ -57,82 +57,105 @@ public class PlayerController2_5D : MonoBehaviour
     }
 
     void Update()
+{
+    float h = Input.GetAxisRaw("Horizontal");
+    float v = Input.GetAxisRaw("Vertical");
+    isRunning = Input.GetKey(runKey);
+    bool crouchHeld = Input.GetKey(crouchKey);
+
+    bool onDiagonalStairs = currentStair != null && currentStair.type == StairZone.StairType.Diagonal;
+    bool onDepthStairs    = currentStair != null && currentStair.type == StairZone.StairType.Depth;
+
+    Vector3 velocity = Vector3.zero;
+
+    if (onDepthStairs)
     {
-        float h = Input.GetAxisRaw("Horizontal");
-        float v = Input.GetAxisRaw("Vertical");
-        isRunning = Input.GetKey(runKey);
-        bool crouchHeld = Input.GetKey(crouchKey);
+        isCrouching = false;
+        float speed = walkSpeed * depthStairSpeedMultiplier;
+        velocity.z = v * speed;
 
-        bool onDiagonalStairs = currentStair != null && currentStair.type == StairZone.StairType.Diagonal;
-        bool onDepthStairs = currentStair != null && currentStair.type == StairZone.StairType.Depth;
-
-        Vector3 velocity = Vector3.zero;
-
-        if (onDepthStairs)
+        if (currentStair.lockXToEntryPoint)
         {
-
-            isCrouching = false;
-            float speed = walkSpeed * depthStairSpeedMultiplier;
-            velocity.z = v * speed;
-
-            if (currentStair.lockXToEntryPoint)
-            {
-
-                float xDiff = depthRailX - transform.position.x;
-                velocity.x = Mathf.Clamp(xDiff * 10f, -speed, speed);
-            }
-
-            if (v > 0.01f) facing = FacingDirection.Away;
-            else if (v < -0.01f) facing = FacingDirection.Toward;
-        }
-        else if (onDiagonalStairs)
-        {
-            isCrouching = false;
-            float speed = walkSpeed * diagonalStairSpeedMultiplier;
-            if (allowRunOnStairs && isRunning) speed = runSpeed * diagonalStairSpeedMultiplier;
-
-            Vector2 dir = currentStair.slopeDirection.sqrMagnitude > 0.0001f
-                ? currentStair.slopeDirection.normalized
-                : Vector2.right;
-
-            velocity.x = dir.x * h * speed;
-            velocity.y = dir.y * Mathf.Abs(h) * speed;
-
-            if (h > 0.01f) facing = FacingDirection.Right;
-            else if (h < -0.01f) facing = FacingDirection.Left;
-        }
-        else
-        {
-            isCrouching = crouchHeld;
-            float speed = isCrouching ? crouchSpeed : (isRunning ? runSpeed : walkSpeed);
-            velocity.x = h * speed;
-
-            if (h > 0.01f) facing = FacingDirection.Right;
-            else if (h < -0.01f) facing = FacingDirection.Left;
+            float xDiff = depthRailX - transform.position.x;
+            velocity.x = Mathf.Clamp(xDiff * 10f, -speed, speed);
         }
 
+        if (v > 0.01f) facing = FacingDirection.Away;
+        else if (v < -0.01f) facing = FacingDirection.Toward;
+    }
+    else if (onDiagonalStairs)
+    {
+        isCrouching = false;
+        float speed = walkSpeed * diagonalStairSpeedMultiplier;
+        if (allowRunOnStairs && isRunning) speed = runSpeed * diagonalStairSpeedMultiplier;
 
-        if (controller.isGrounded)
-        {
-            verticalVelocity = groundedStickForce;
-        }
-        else if (!onDiagonalStairs)
-        {
-            verticalVelocity += gravity * Time.deltaTime;
-        }
+        Vector2 dir = currentStair.slopeDirection.sqrMagnitude > 0.0001f
+            ? currentStair.slopeDirection.normalized
+            : Vector2.right;
 
-        if (!onDiagonalStairs)
-        {
-            velocity.y = verticalVelocity;
-        }
+        velocity.x = dir.x * h * speed;
+        velocity.y = dir.y * Mathf.Abs(h) * speed;
 
-        controller.Move(velocity * Time.deltaTime);
+        if (h > 0.01f) facing = FacingDirection.Right;
+        else if (h < -0.01f) facing = FacingDirection.Left;
+    }
+    else
+    {
+        isCrouching = crouchHeld;
+        float speed = isCrouching ? crouchSpeed : (isRunning ? runSpeed : walkSpeed);
+        velocity.x = h * speed;
 
-        UpdateCrouchCollider();
-        UpdateFacing();
-        UpdateAnimator(h, v, onDiagonalStairs, onDepthStairs);
+        if (h > 0.01f) facing = FacingDirection.Right;
+        else if (h < -0.01f) facing = FacingDirection.Left;
     }
 
+    
+    if (onDepthStairs)
+    {
+        
+        verticalVelocity = 0f;
+    }
+    else if (controller.isGrounded)
+    {
+        verticalVelocity = groundedStickForce;
+    }
+    else if (!onDiagonalStairs)
+    {
+        verticalVelocity += gravity * Time.deltaTime;
+    }
+
+    if (!onDiagonalStairs && !onDepthStairs)
+    {
+        velocity.y = verticalVelocity;
+    }
+
+    // --- Move ---
+    controller.Move(velocity * Time.deltaTime);
+
+    
+    if (onDepthStairs)
+    {
+        Vector3 pos = transform.position;
+
+        // clamp Z so the player can't walk off either end of the trigger.
+        float clampedZ = currentStair.ClampZ(pos.z);
+
+        // drive Y from the stair slope for the (possibly clamped) Z.
+        float targetY = currentStair.GetYForZ(clampedZ);
+
+        // Move through controller so collisions still work, but ignore the
+        // normal gravity thingy Ive skipped up.
+        Vector3 correction = new Vector3(0f, targetY - pos.y, clampedZ - pos.z);
+        controller.Move(correction);
+
+        // Re-anchor vertical velocity to 0 so we don't accumulate falling.
+        verticalVelocity = 0f;
+    }
+
+    UpdateCrouchCollider();
+    UpdateFacing();
+    UpdateAnimator(h, v, onDiagonalStairs, onDepthStairs);
+}
     void UpdateCrouchCollider()
     {
         float targetHeight = isCrouching ? crouchingHeight : standingHeight;
